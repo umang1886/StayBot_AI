@@ -1,0 +1,437 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "hotel-bot-webhook",
+        "options": {}
+      },
+      "id": "2e1d44eb-eb03-4956-a800-8a92a4108b17",
+      "name": "Telegram Webhook (Hotel)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        784
+      ],
+      "webhookId": "hotel-bot-webhook-id"
+    },
+    {
+      "parameters": {
+        "jsCode": "const item = $input.all()[0].json;\nconst headers = item.headers || {};\nconst body = item.body || {};\nconst message = body.message || {};\n\n// Robust case-insensitive header extraction\nconst lowerHeaders = {};\nfor (const key in headers) {\n  lowerHeaders[key.toLowerCase()] = headers[key];\n}\nconst secret_token = lowerHeaders['x-telegram-bot-api-secret-token'];\n\nreturn [{\n  json: {\n    chat_id: message.chat ? message.chat.id : null,\n    user_text: message.text || '',\n    secret_token: secret_token\n  }\n}];"
+      },
+      "id": "ba8d0f57-1b8b-4009-b56e-f0f7cf5be9bb",
+      "name": "Extract Hotel Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -544,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://dxgzqfictchwsatqmtkr.supabase.co/rest/v1/hotels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "bot_token"
+            },
+            {
+              "name": "id",
+              "value": "=eq.{{ $json.secret_token }}"
+            }
+          ]
+        },
+        "options": {},
+        "alwaysOutputData": true
+      },
+      "id": "0cdc443a-bb66-44a2-8d10-ee2a6aac78b5",
+      "name": "Lookup Hotel Token",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -304,
+        784
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "15UJQAgEDgARmWOo",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const results = $input.all();\nconst extraction = $node[\"Extract Hotel Data\"].json;\nconst chat_id = extraction.chat_id;\nconst user_text = extraction.user_text || '';\n\nlet bot_token = '';\nif (results.length > 0 && results[0].json) {\n  const row = Array.isArray(results[0].json) ? results[0].json[0] : results[0].json;\n  if (row && row.bot_token) bot_token = row.bot_token;\n}\n\nif (!bot_token) {\n  return [{ json: { intent: 'unknown', error: 'Hotel not found for token', chat_id } }];\n}\n\nconst lowerText = user_text.toLowerCase();\nlet intent = 'unknown';\nif (lowerText.includes('menu') || lowerText.includes('food')) intent = 'show_menu';\nelse if (lowerText.includes('book') || lowerText.includes('reserve')) intent = 'book_table';\nelse if (lowerText.includes('cancel')) intent = 'cancel_booking';\nelse if (lowerText.includes('available') || lowerText.includes('slot')) intent = 'check_availability';\nelse if (lowerText.includes('contact') || lowerText.includes('phone')) intent = 'contact';\n\nreturn [{ json: { intent, bot_token, chat_id } }];"
+      },
+      "id": "e5079bcb-6c27-4ba5-8d7e-66513bd3784f",
+      "name": "AI Intent / Rule Detector",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json.intent }}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "show_menu"
+            },
+            {
+              "value2": "book_table",
+              "output": 1
+            },
+            {
+              "value2": "check_availability",
+              "output": 2
+            },
+            {
+              "value2": "unknown",
+              "output": 3
+            }
+          ]
+        }
+      },
+      "id": "33fca5a3-8e23-4978-a8f1-c4e79a9e57bc",
+      "name": "Route by Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        128,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $json.bot_token }}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            },
+            {
+              "name": "text",
+              "value": "🍽️ Our Menu: \n- Burger: $10\n- Pizza: $15\n(To be connected to Google Sheets)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "457fb251-0dd2-43ef-aad4-7fb740217b26",
+      "name": "Send Menu (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        464,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $json.bot_token }}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            },
+            {
+              "name": "text",
+              "value": "📅 Let's book a table! What date would you like? (Booking Flow to be connected to Supabase)"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e1179271-df2b-4219-9c04-043010cd0593",
+      "name": "Start Booking (Mock)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        464,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.telegram.org/bot{{ $json.bot_token }}/sendMessage",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.chat_id }}"
+            },
+            {
+              "name": "text",
+              "value": "I am not sure how to help with that. You can ask me for the menu, to book a table, or check availability."
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ee31bcc3-bc5f-4efa-adc5-b2f30ef6b3db",
+      "name": "Unknown Intent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        464,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "central-bot-webhook",
+        "options": {}
+      },
+      "id": "6d46567c-a83e-4c36-bd9a-c7d2156ce090",
+      "name": "Webhook1",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        -720,
+        1104
+      ],
+      "webhookId": "8ba7b5d2-de77-4d34-9c31-c863be63e708"
+    },
+    {
+      "parameters": {
+        "keepOnlySet": true,
+        "values": {
+          "string": [
+            {
+              "name": "chat_id",
+              "value": "={{ $json.body.message.chat.id }}"
+            },
+            {
+              "name": "user_text",
+              "value": "={{ $json.body.message.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2f7fe164-bb66-4ead-8770-6f3595ec487c",
+      "name": "Extract Data1",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [
+        -480,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "url": "=https://dxgzqfictchwsatqmtkr.supabase.co/rest/v1/hotels",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "select",
+              "value": "hotel_name,city,bot_username"
+            },
+            {
+              "name": "or",
+              "value": "=(hotel_name.ilike.*{{$json.user_text}}*,city.ilike.*{{$json.user_text}}*)"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7b37c80d-8dcb-4d8d-86e3-48d2c888b035",
+      "name": "Search Supabase1",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        -272,
+        1104
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "15UJQAgEDgARmWOo",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\n\n// chat_id aur user_text Extract Data node se lo\nconst chat_id = $node[\"Extract Data1\"].json.chat_id;\nconst user_text = $node[\"Extract Data1\"].json.user_text;\n\nif (items.length > 0 && items[0].json.hotel_name) {\n\n  let text = \"🏨 I found these hotels:\\n\\n\";\n\n  items.forEach((item, i) => {\n    text += `${i + 1}. ${item.json.hotel_name} (${item.json.city})\\n`;\n    text += `https://t.me/${item.json.bot_username}\\n\\n`;\n  });\n\n  return [\n    {\n      json: {\n        chat_id,\n        text\n      }\n    }\n  ];\n\n} else {\n\n  return [\n    {\n      json: {\n        chat_id,\n        text: `❌ No hotels found for \\\"${user_text}\\\".`\n      }\n    }\n  ];\n\n}"
+      },
+      "id": "703cac21-ffa5-49c9-bcd7-008092d17db8",
+      "name": "Process Results1",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -64,
+        1104
+      ]
+    },
+    {
+      "parameters": {
+        "chatId": "={{$json.chat_id}}",
+        "text": "={{$json.text}}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        144,
+        1104
+      ],
+      "id": "19bb879b-14f3-42bc-b03c-8f15f987ab08",
+      "name": "Send a text message",
+      "webhookId": "d206ad29-0f86-40b9-92e1-2d7c396576ab",
+      "credentials": {
+        "telegramApi": {
+          "id": "fpz2zC5cMjZ9j4xr",
+          "name": "Telegram account 2"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Telegram Webhook (Hotel)": {
+      "main": [
+        [
+          {
+            "node": "Extract Hotel Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Hotel Data": {
+      "main": [
+        [
+          {
+            "node": "Lookup Hotel Token",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lookup Hotel Token": {
+      "main": [
+        [
+          {
+            "node": "AI Intent / Rule Detector",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Intent / Rule Detector": {
+      "main": [
+        [
+          {
+            "node": "Route by Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route by Intent": {
+      "main": [
+        [
+          {
+            "node": "Send Menu (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Start Booking (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [],
+        [
+          {
+            "node": "Unknown Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook1": {
+      "main": [
+        [
+          {
+            "node": "Extract Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Data1": {
+      "main": [
+        [
+          {
+            "node": "Search Supabase1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Supabase1": {
+      "main": [
+        [
+          {
+            "node": "Process Results1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Results1": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "pinData": {},
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "27a66e5ed4d72099d8c47314c295c76f92baf6a54f0ac598afeef347014cb87c"
+  }
+}

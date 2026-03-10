@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.env
+*.env.local
+
+# Google credentials (NEVER commit)
+backend/credentials/
+*.json.credentials
+google-service-account.json
+
+# Node
+node_modules/
+.npm
+*.log
+npm-debug.log*
+
+# Vite / React build output
+dashboard/dist/
+dashboard/.vite/
+
+# IDEs
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db
+
+# n8n
+n8n/.env
+
+# Secrets
+*.pem
+*.key
+secrets/
